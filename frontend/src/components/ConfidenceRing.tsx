@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 type Props = {
   value: number;
@@ -25,11 +25,8 @@ export default function ConfidenceRing({
   const circumference = 2 * Math.PI * radius;
   const target = Math.max(0, Math.min(100, value));
   const [progress, setProgress] = useState(0);
-  const startedRef = useRef(false);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
     const start = performance.now();
     let raf = 0;
     const step = (now: number) => {
@@ -38,6 +35,7 @@ export default function ConfidenceRing({
       setProgress(target * eased);
       if (t < 1) raf = requestAnimationFrame(step);
     };
+    setProgress(0);
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
   }, [target, duration]);
