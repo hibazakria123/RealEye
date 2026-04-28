@@ -8,6 +8,7 @@ type Props = {
   preview: string | null;
   isAnalyzing: boolean;
   dragOver: boolean;
+  errorMessage?: string | null;
   onFile: (file: File) => void;
   onSetDragOver: (v: boolean) => void;
   onAnalyze: () => void;
@@ -18,6 +19,7 @@ export default function UploadZone({
   preview,
   isAnalyzing,
   dragOver,
+  errorMessage,
   onFile,
   onSetDragOver,
   onAnalyze,
@@ -127,6 +129,19 @@ export default function UploadZone({
                 <>Detect Deepfake</>
               )}
             </button>
+          </div>
+        ) : null}
+
+        {errorMessage ? (
+          <div
+            role="alert"
+            className="mx-auto mt-6 max-w-2xl rounded-2xl border border-danger/40 bg-danger/10 px-5 py-4 text-sm text-cream/95"
+          >
+            <p className="font-semibold text-danger">Backend unavailable</p>
+            <p className="mt-1 text-cream/80">{errorMessage}</p>
+            <p className="mt-2 text-xs text-mute">
+              Showing a mock result so you can preview the UI.
+            </p>
           </div>
         ) : null}
       </div>

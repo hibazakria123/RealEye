@@ -186,5 +186,28 @@ async def detect(file: UploadFile = File(...)) -> Dict:
     if not predictions:
         raise HTTPException(status_code=503, detail="No models available for inference")
 
-    result = majority_vote(predictions)
-    return {"filename": file.filename, **result}
+    voted = majority_vote(predictions)
+    total = len(predictions)
+    agreement_count = int(voted["agreement"])
+
+    result = {
+        "final_prediction": voted["final_prediction"],
+        "weighted_confidence": round(float(voted["weighted_confidence"]) * 100, 2),
+        "avg_confidence": round(float(voted["avg_confidence"]) * 100, 2),
+        "agreement": f"{agreement_count}/{total}",
+        "agreement_ratio": round(agreement_count / total, 4),
+        "individual_votes": [
+            {
+                "model": p["model_name"],
+                "prediction": p["prediction"],
+                "confidence": round(float(p["confidence"]) * 100, 2),
+            }
+            for p in voted["individual_votes"]
+        ],
+    }
+
+    return {
+        "filename": file.filename,
+        "models_used": total,
+        "result": result,
+    }
