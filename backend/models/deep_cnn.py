@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Optional, Union
+
 import torch
 import torch.nn as nn
 
@@ -68,3 +71,19 @@ class DeepCNN(nn.Module):
         x = self.block2(x)
         x = self.block3(x)
         return self.classifier(x)
+
+
+def load_model_a(
+    weights_path: Optional[Union[str, Path]] = None,
+    device: Union[str, torch.device] = "cpu",
+) -> DeepCNN:
+    """Instantiate DeepCNN, optionally load modelA.pth, move to device, set eval()."""
+    model = DeepCNN()
+    if weights_path is not None:
+        path = Path(weights_path)
+        if path.exists():
+            state = torch.load(path, map_location=device)
+            if isinstance(state, dict) and "state_dict" in state:
+                state = state["state_dict"]
+            model.load_state_dict(state)
+    return model.to(device).eval()

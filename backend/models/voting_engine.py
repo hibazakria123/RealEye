@@ -11,20 +11,25 @@ def majority_vote(predictions: List[Dict]) -> Dict:
     Combine predictions from N models via majority voting.
 
     Each prediction must be a dict with at least:
-        - "model":      str, model name
+        - "model_name": str
         - "prediction": str, "REAL" or "FAKE"
         - "confidence": float in [0, 1]
 
-    Returns a dict with the final decision, weighted/average confidence,
-    agreement ratio, and per-model votes.
+    Returns:
+        {
+            "final_prediction":    "REAL" | "FAKE",
+            "weighted_confidence": float,    # agreeing 1.5x, dissenting 0.5x
+            "avg_confidence":      float,
+            "agreement":           int,      # count of models that agree
+            "individual_votes":    [predictions...],
+        }
     """
     if not predictions:
         raise ValueError("predictions must not be empty")
 
     labels = [p["prediction"] for p in predictions]
     counts = Counter(labels)
-    final_prediction, top_count = counts.most_common(1)[0]
-    agreement_ratio = top_count / len(predictions)
+    final_prediction, agreement_count = counts.most_common(1)[0]
 
     weighted_sum = 0.0
     weight_total = 0.0
@@ -40,6 +45,6 @@ def majority_vote(predictions: List[Dict]) -> Dict:
         "final_prediction": final_prediction,
         "weighted_confidence": round(weighted_confidence, 4),
         "avg_confidence": round(avg_confidence, 4),
-        "agreement_ratio": round(agreement_ratio, 4),
-        "votes": predictions,
+        "agreement": agreement_count,
+        "individual_votes": predictions,
     }

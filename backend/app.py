@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 from torchvision import transforms
 
-from models import DeepCNN, FocusCNN, HybridNet, majority_vote
+from models import load_model_a, load_model_b, load_model_c, majority_vote
 
 
 logging.basicConfig(level=logging.INFO)
@@ -29,7 +29,10 @@ PREPROCESS = transforms.Compose([
 ])
 
 
-app = FastAPI(title="DeepGuard", description="Deepfake detection via 3-model majority voting")
+app = FastAPI(
+    title="DeepGuard",
+    description="Deepfake detection via 3-model majority voting",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -47,53 +50,39 @@ MODELS: Dict[str, Optional[torch.nn.Module]] = {
 }
 
 
-def _try_load_weights(model: torch.nn.Module, path: Path, name: str) -> bool:
-    if not path.exists():
-        logger.warning("[%s] weights not found at %s", name, path)
-        return False
+def _safe_load(name: str, fn, *args, **kwargs) -> Optional[torch.nn.Module]:
     try:
-        state = torch.load(path, map_location=DEVICE)
-        if isinstance(state, dict) and "state_dict" in state:
-            state = state["state_dict"]
-        model.load_state_dict(state)
-        logger.info("[%s] loaded weights from %s", name, path)
-        return True
+        model = fn(*args, **kwargs)
+        logger.info("[%s] ready", name)
+        return model
     except Exception as exc:
-        logger.exception("[%s] failed to load weights: %s", name, exc)
-        return False
+        logger.exception("[%s] failed to load: %s", name, exc)
+        return None
 
 
 @app.on_event("startup")
 def load_models() -> None:
-    # Model A
-    deep = DeepCNN()
-    _try_load_weights(deep, WEIGHTS_DIR / "modelA.pth", "DeepCNN")
-    deep.to(DEVICE).eval()
-    MODELS["DeepCNN"] = deep
-
-    # Model B
-    focus = FocusCNN()
-    _try_load_weights(focus, WEIGHTS_DIR / "modelB.pth", "FocusCNN")
-    focus.to(DEVICE).eval()
-    MODELS["FocusCNN"] = focus
-
-    # Model C — fine-tuned weights are optional for now.
-    try:
-        hybrid = HybridNet(pretrained=True)
-        _try_load_weights(hybrid, WEIGHTS_DIR / "modelC.pth", "HybridNet")
-        hybrid.to(DEVICE).eval()
-        MODELS["HybridNet"] = hybrid
-    except Exception as exc:
-        logger.exception("Failed to initialize HybridNet: %s", exc)
-        MODELS["HybridNet"] = None
+    MODELS["DeepCNN"] = _safe_load(
+        "DeepCNN", load_model_a, WEIGHTS_DIR / "modelA.pth", DEVICE
+    )
+    MODELS["FocusCNN"] = _safe_load(
+        "FocusCNN", load_model_b, WEIGHTS_DIR / "modelB.pth", DEVICE
+    )
+    # modelC.pth is optional — pretrained ViT is used as fallback.
+    MODELS["HybridNet"] = _safe_load(
+        "HybridNet", load_model_c, WEIGHTS_DIR / "modelC.pth", DEVICE
+    )
 
 
 def _interpret(prob: float) -> Dict:
-    """Convert sigmoid output into label + confidence."""
     is_fake = prob > FAKE_THRESHOLD
     label = "FAKE" if is_fake else "REAL"
     confidence = float(prob if is_fake else 1.0 - prob)
-    return {"prediction": label, "confidence": round(confidence, 4), "raw_score": round(float(prob), 4)}
+    return {
+        "prediction": label,
+        "confidence": round(confidence, 4),
+        "raw_score": round(float(prob), 4),
+    }
 
 
 def _run_model(name: str, model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
@@ -101,7 +90,7 @@ def _run_model(name: str, model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
         output = model(tensor)
     prob = output.view(-1)[0].item()
     result = _interpret(prob)
-    result["model"] = name
+    result["model_name"] = name
     return result
 
 
@@ -137,7 +126,4 @@ async def detect(file: UploadFile = File(...)) -> Dict:
         raise HTTPException(status_code=503, detail="No models available for inference")
 
     result = majority_vote(predictions)
-    return {
-        "filename": file.filename,
-        **result,
-    }
+    return {"filename": file.filename, **result}
