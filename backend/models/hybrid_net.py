@@ -8,26 +8,31 @@ import timm
 
 class HybridNet(nn.Module):
     """
-    CNN preprocessor + ViT classifier.
+    CNN feature extractor + timm ViT.
 
-    Architecture (matches modelC.pth state-dict layout):
-        cnn_feature_extractor.0  Conv2d(3, 64)
-        cnn_feature_extractor.3  Conv2d(64, 128)
-        cnn_feature_extractor.6  Conv2d(128, 3)     # back to 3 channels for ViT
-        vit                       timm.create_model("vit_base_patch16_224.augreg2_in21k_ft_in1k")
-                                    with num_classes=2 — i.e. vit.head is Linear(768, 2)
+    Architecture (matches modelC.pth state-dict, exact):
+        cnn_feature_extractor.0  Conv2d(3, 64, 3, p=1)        [64, 3, 3, 3]
+        cnn_feature_extractor.3  Conv2d(64, 128, 3, p=1)      [128, 64, 3, 3]
+        cnn_feature_extractor.6  Conv2d(128, 256, 3, p=1)     [256, 128, 3, 3]
 
-    The ViT's standard 3-channel patch_embed.proj is preserved, so the CNN
-    preprocessor must output 3 channels in its last Conv2d.
+        vit.cls_token                 [1, 1, 768]
+        vit.pos_embed                 [1, 197, 768]   # 14*14 + 1 → 224×224 input
+        vit.patch_embed.proj          Conv2d(3, 768, 16, stride=16)
+        vit.blocks.0..11              standard ViT base
+        vit.norm                      LayerNorm(768)
+        vit.head                      Linear(768, 2)  ← 2-class output
 
-    Index gaps (1, 2, 4, 5, 7) are parameter-free fillers (ReLU + Dropout2d)
-    chosen so that Conv2d lands at indices 0, 3, 6 in the Sequential, which
-    is what the .pth state_dict requires.
+    The CNN's output (256-d after AdaptiveAvgPool2d(1)) cannot feed
+    vit.head directly because vit.head's weight is [2, 768], not [2, 1024].
+    Per definitive guidance, the final classification comes from the ViT
+    alone. The CNN parameters load successfully but are not used in
+    forward() — they exist for state-dict compatibility.
 
-    Outputs raw 2-class logits.
+    Input: 224×224 RGB.
     """
 
     BACKBONE_NAME = "vit_base_patch16_224.augreg2_in21k_ft_in1k"
+    INPUT_SIZE = 224
 
     def __init__(self, num_classes: int = 2, pretrained: bool = False) -> None:
         super().__init__()
@@ -35,12 +40,13 @@ class HybridNet(nn.Module):
         self.cnn_feature_extractor = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, padding=1),     # 0
             nn.ReLU(inplace=True),                           # 1
-            nn.Dropout2d(0.1),                               # 2
+            nn.MaxPool2d(2),                                 # 2
             nn.Conv2d(64, 128, kernel_size=3, padding=1),    # 3
             nn.ReLU(inplace=True),                           # 4
-            nn.Dropout2d(0.1),                               # 5
-            nn.Conv2d(128, 3, kernel_size=3, padding=1),     # 6
+            nn.MaxPool2d(2),                                 # 5
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),   # 6
             nn.ReLU(inplace=True),                           # 7
+            nn.AdaptiveAvgPool2d(1),                         # 8
         )
 
         self.vit = timm.create_model(
@@ -50,7 +56,7 @@ class HybridNet(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.cnn_feature_extractor(x)
+        # Final classification comes from the ViT (vit.head is Linear(768, 2)).
         return self.vit(x)
 
 
@@ -61,10 +67,10 @@ def load_model_c(
     """
     Build HybridNet and load modelC.pth if present.
 
-    When weights are available, the ViT is created without downloading
-    pretrained weights (custom .pth supplies everything). When the file
-    is missing, the ViT falls back to ImageNet pretrained weights with a
-    fresh 2-class head — useful for development without modelC.pth.
+    With weights: instantiate without timm pretrained download (the .pth
+    supplies everything). Without weights: fall back to a pretrained ViT
+    plus a fresh 2-class head — useful for development before modelC.pth
+    is available.
     """
     path = Path(weights_path) if weights_path else None
 

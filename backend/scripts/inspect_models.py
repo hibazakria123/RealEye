@@ -3,9 +3,12 @@ Quick diagnostic: load all 3 models, run inference on either a random
 tensor or a real image, and print the raw logits + softmax probabilities
 for each model. Use this to verify the class index convention.
 
+Each model is fed at its native input size (DeepCNN/FocusCNN: 48×48,
+HybridNet: 224×224).
+
 Usage:
     cd backend
-    python scripts/inspect_models.py                 # random tensor
+    python scripts/inspect_models.py                 # random tensors
     python scripts/inspect_models.py path/to/img.jpg # real image
     python scripts/inspect_models.py --label real path/to/known_real.jpg
     python scripts/inspect_models.py --label fake path/to/known_fake.jpg
@@ -17,6 +20,7 @@ the truth — that's how you discover whether class 0 is REAL or FAKE.
 import argparse
 import sys
 from pathlib import Path
+from typing import Optional
 
 import torch
 from PIL import Image
@@ -26,25 +30,33 @@ from torchvision import transforms
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from models import load_model_a, load_model_b, load_model_c  # noqa: E402
+from models import (  # noqa: E402
+    DeepCNN,
+    FocusCNN,
+    HybridNet,
+    load_model_a,
+    load_model_b,
+    load_model_c,
+)
 
 
-PREPROCESS = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225],
-    ),
-])
+def make_preprocess(size: int) -> transforms.Compose:
+    return transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.ToTensor(),
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],
+            std=[0.229, 0.224, 0.225],
+        ),
+    ])
 
 
-def make_tensor(image_path: str | None) -> torch.Tensor:
+def make_tensor(image_path: Optional[str], size: int) -> torch.Tensor:
     if image_path is None:
         torch.manual_seed(0)
-        return torch.randn(1, 3, 224, 224)
+        return torch.randn(1, 3, size, size)
     img = Image.open(image_path).convert("RGB")
-    return PREPROCESS(img).unsqueeze(0)
+    return make_preprocess(size)(img).unsqueeze(0)
 
 
 def main() -> None:
@@ -60,24 +72,23 @@ def main() -> None:
 
     weights_dir = ROOT / "weights"
     device = "cpu"
-    tensor = make_tensor(args.image)
-    print(f"Input: {'random tensor' if not args.image else args.image}")
-    print(f"Tensor shape: {tuple(tensor.shape)}\n")
+    print(f"Input: {'random tensor' if not args.image else args.image}\n")
 
     loaders = [
-        ("DeepCNN",   load_model_a, weights_dir / "modelA.pth"),
-        ("FocusCNN",  load_model_b, weights_dir / "modelB.pth"),
-        ("HybridNet", load_model_c, weights_dir / "modelC.pth"),
+        ("DeepCNN",   load_model_a, weights_dir / "modelA.pth",   DeepCNN.INPUT_SIZE),
+        ("FocusCNN",  load_model_b, weights_dir / "modelB.pth",   FocusCNN.INPUT_SIZE),
+        ("HybridNet", load_model_c, weights_dir / "modelC.pth",   HybridNet.INPUT_SIZE),
     ]
 
-    for name, fn, path in loaders:
-        print(f"=== {name} ===")
+    for name, fn, path, size in loaders:
+        print(f"=== {name} (input {size}×{size}) ===")
         try:
             model = fn(path, device)
         except Exception as exc:
             print(f"  load FAILED: {type(exc).__name__}: {exc}\n")
             continue
 
+        tensor = make_tensor(args.image, size)
         with torch.no_grad():
             out = model(tensor)
 
@@ -90,10 +101,10 @@ def main() -> None:
             print(f"  softmax:      {[round(p, 4) for p in probs.tolist()]}")
             print(f"  argmax:       index {pred_idx} (probability {probs[pred_idx]:.4f})")
             if args.label:
-                truth_says = "FAKE" if args.label == "fake" else "REAL"
+                truth = args.label.upper()
                 print(
-                    f"  → If this image is truly {truth_says}, then class "
-                    f"index {pred_idx} corresponds to {truth_says}."
+                    f"  → If this image is truly {truth}, then class "
+                    f"index {pred_idx} corresponds to {truth}."
                 )
         else:
             prob = float(out.view(-1)[0].item())

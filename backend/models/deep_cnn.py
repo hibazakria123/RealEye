@@ -7,71 +7,64 @@ import torch.nn as nn
 
 class DeepCNN(nn.Module):
     """
-    Three convolutional blocks → adaptive avg-pool → FC head.
+    Three convolutional blocks → flatten → FC head.
 
     Outputs raw 2-class logits (no sigmoid). Inference applies softmax + argmax.
-    Convention: class 0 = REAL, class 1 = FAKE.
+    Convention follows the runtime configuration in app.py.
 
-    State dict keys (matches modelA.pth):
-        block1.0 / block1.2 / block1.3       Conv2d / BatchNorm2d / Conv2d
-        block2.0 / block2.2 / block2.3       Conv2d / BatchNorm2d / Conv2d
-        block3.0 / block3.2 / block3.3       Conv2d / BatchNorm2d / Conv2d
-        classifier.1                          Linear(128*6*6=4608, 512)
-        classifier.4                          Linear(512, 2)
+    Input: 48×48 RGB (after 3 MaxPool2d(2): 48 → 24 → 12 → 6 → flatten 128*6*6 = 4608)
 
-    AdaptiveAvgPool2d((6,6)) is parameter-free, so it doesn't appear in
-    the state dict — but it's what locks the spatial dim to 6x6 regardless
-    of input image size.
+    State dict layout (modelA.pth, exact):
+        block1.0  Conv2d(3, 32, 3, p=1)        weight [32, 3, 3, 3]
+        block1.2  BatchNorm2d(32)              weight [32]
+        block1.3  Conv2d(32, 32, 3, p=1)       weight [32, 32, 3, 3]
+        block2.0  Conv2d(32, 64, 3, p=1)       weight [64, 32, 3, 3]
+        block2.2  BatchNorm2d(64)              weight [64]
+        block2.3  Conv2d(64, 64, 3, p=1)       weight [64, 64, 3, 3]
+        block3.0  Conv2d(64, 128, 3, p=1)      weight [128, 64, 3, 3]
+        block3.2  BatchNorm2d(128)             weight [128]
+        block3.3  Conv2d(128, 128, 3, p=1)     weight [128, 128, 3, 3]
+        classifier.1  Linear(4608, 512)        weight [512, 4608]
+        classifier.4  Linear(512, 2)           weight [2, 512]
+
+    Per-block layer indices (0..6):
+        0: Conv2d        1: ReLU       2: BatchNorm2d
+        3: Conv2d        4: ReLU       5: MaxPool2d(2)
+        6: Dropout(0.25)
     """
+
+    INPUT_SIZE = 48
 
     def __init__(self, num_classes: int = 2) -> None:
         super().__init__()
 
-        self.block1 = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),    # block1.0
-            nn.ReLU(inplace=True),                          # block1.1
-            nn.BatchNorm2d(32),                             # block1.2
-            nn.Conv2d(32, 32, kernel_size=3, padding=1),    # block1.3
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
-        )
+        def block(in_ch: int, mid_ch: int, out_ch: int) -> nn.Sequential:
+            return nn.Sequential(
+                nn.Conv2d(in_ch, mid_ch, kernel_size=3, padding=1),  # .0
+                nn.ReLU(inplace=True),                                # .1
+                nn.BatchNorm2d(mid_ch),                               # .2
+                nn.Conv2d(mid_ch, out_ch, kernel_size=3, padding=1),  # .3
+                nn.ReLU(inplace=True),                                # .4
+                nn.MaxPool2d(2),                                      # .5
+                nn.Dropout(0.25),                                     # .6
+            )
 
-        self.block2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),    # block2.0
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(64),                             # block2.2
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),    # block2.3
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
-        )
-
-        self.block3 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),   # block3.0
-            nn.ReLU(inplace=True),
-            nn.BatchNorm2d(128),                            # block3.2
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),  # block3.3
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Dropout(0.25),
-        )
-
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((6, 6))
+        self.block1 = block(3, 32, 32)
+        self.block2 = block(32, 64, 64)
+        self.block3 = block(64, 128, 128)
 
         self.classifier = nn.Sequential(
-            nn.Flatten(),                                   # classifier.0
-            nn.Linear(128 * 6 * 6, 512),                    # classifier.1
-            nn.ReLU(inplace=True),                          # classifier.2
-            nn.Dropout(0.5),                                # classifier.3
-            nn.Linear(512, num_classes),                    # classifier.4
+            nn.Flatten(),                       # .0
+            nn.Linear(128 * 6 * 6, 512),        # .1
+            nn.ReLU(inplace=True),              # .2
+            nn.Dropout(0.5),                    # .3
+            nn.Linear(512, num_classes),        # .4
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.block1(x)
         x = self.block2(x)
         x = self.block3(x)
-        x = self.adaptive_pool(x)
         return self.classifier(x)
 
 

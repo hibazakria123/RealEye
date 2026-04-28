@@ -2,7 +2,7 @@ import io
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import torch
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -20,14 +20,23 @@ WEIGHTS_DIR = Path(__file__).parent / "weights"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 FAKE_THRESHOLD = 0.5
 
-PREPROCESS = transforms.Compose([
-    transforms.Resize((224, 224)),
-    transforms.ToTensor(),
-    transforms.Normalize(
-        mean=[0.485, 0.456, 0.406],
-        std=[0.229, 0.224, 0.225],
-    ),
-])
+# Standard ImageNet normalization. If your training used something else
+# (e.g. [0.5, 0.5, 0.5] / [0.5, 0.5, 0.5]), update these.
+NORM_MEAN = [0.485, 0.456, 0.406]
+NORM_STD = [0.229, 0.224, 0.225]
+
+
+def _make_preprocess(size: int) -> transforms.Compose:
+    return transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=NORM_MEAN, std=NORM_STD),
+    ])
+
+
+# Two pipelines: 48×48 for the CNNs, 224×224 for HybridNet.
+PREPROCESS_48 = _make_preprocess(48)
+PREPROCESS_224 = _make_preprocess(224)
 
 
 app = FastAPI(
@@ -44,10 +53,11 @@ app.add_middleware(
 )
 
 
-MODELS: Dict[str, Optional[torch.nn.Module]] = {
-    "DeepCNN": None,
-    "FocusCNN": None,
-    "HybridNet": None,
+# Each entry: (model, preprocess_pipeline). model=None when load failed.
+MODELS: Dict[str, Tuple[Optional[torch.nn.Module], transforms.Compose]] = {
+    "DeepCNN":   (None, PREPROCESS_48),
+    "FocusCNN":  (None, PREPROCESS_48),
+    "HybridNet": (None, PREPROCESS_224),
 }
 
 
@@ -63,15 +73,18 @@ def _safe_load(name: str, fn, *args, **kwargs) -> Optional[torch.nn.Module]:
 
 @app.on_event("startup")
 def load_models() -> None:
-    MODELS["DeepCNN"] = _safe_load(
-        "DeepCNN", load_model_a, WEIGHTS_DIR / "modelA.pth", DEVICE
+    MODELS["DeepCNN"] = (
+        _safe_load("DeepCNN", load_model_a, WEIGHTS_DIR / "modelA.pth", DEVICE),
+        PREPROCESS_48,
     )
-    MODELS["FocusCNN"] = _safe_load(
-        "FocusCNN", load_model_b, WEIGHTS_DIR / "modelB.pth", DEVICE
+    MODELS["FocusCNN"] = (
+        _safe_load("FocusCNN", load_model_b, WEIGHTS_DIR / "modelB.pth", DEVICE),
+        PREPROCESS_48,
     )
     # modelC.pth is optional — pretrained ViT is used as fallback.
-    MODELS["HybridNet"] = _safe_load(
-        "HybridNet", load_model_c, WEIGHTS_DIR / "modelC.pth", DEVICE
+    MODELS["HybridNet"] = (
+        _safe_load("HybridNet", load_model_c, WEIGHTS_DIR / "modelC.pth", DEVICE),
+        PREPROCESS_224,
     )
 
 
@@ -95,14 +108,7 @@ logger.info("Class order: index 0 = %s, index 1 = %s", CLASS_NAMES[0], CLASS_NAM
 
 
 def _predict_single(model: torch.nn.Module, tensor: torch.Tensor, name: str = "") -> Dict:
-    """
-    Run one forward pass and convert the output to a label + confidence.
-
-    Handles two output shapes:
-      - 2-class logits (DeepCNN, FocusCNN, HybridNet): softmax → argmax,
-        confidence = softmax probability of the predicted class.
-      - 1-output sigmoid (legacy fallback): threshold at 0.5.
-    """
+    """Run one forward pass and convert the output to label + confidence."""
     with torch.no_grad():
         output = model(tensor)
 
@@ -138,7 +144,13 @@ def _predict_single(model: torch.nn.Module, tensor: torch.Tensor, name: str = ""
     }
 
 
-def _run_model(name: str, model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
+def _run_model(
+    name: str,
+    model: torch.nn.Module,
+    image: Image.Image,
+    preprocess: transforms.Compose,
+) -> Dict:
+    tensor = preprocess(image).unsqueeze(0).to(DEVICE)
     result = _predict_single(model, tensor, name=name)
     result["model_name"] = name
     return result
@@ -149,7 +161,8 @@ def health() -> Dict:
     return {
         "status": "ok",
         "device": str(DEVICE),
-        "models_loaded": {name: model is not None for name, model in MODELS.items()},
+        "class_order": list(CLASS_NAMES),
+        "models_loaded": {name: model is not None for name, (model, _) in MODELS.items()},
     }
 
 
@@ -161,14 +174,12 @@ async def detect(file: UploadFile = File(...)) -> Dict:
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image file")
 
-    tensor = PREPROCESS(image).unsqueeze(0).to(DEVICE)
-
     predictions = []
-    for name, model in MODELS.items():
+    for name, (model, preprocess) in MODELS.items():
         if model is None:
             continue
         try:
-            predictions.append(_run_model(name, model, tensor))
+            predictions.append(_run_model(name, model, image, preprocess))
         except Exception as exc:
             logger.exception("[%s] inference failed: %s", name, exc)
 
