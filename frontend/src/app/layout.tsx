@@ -16,7 +16,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "DeepGuard — Don't guess, detect.",
+  title: "RealEye — See what's real.",
   description:
     "Three independent AI models analyze every pixel. Majority voting delivers the truth with confidence you can measure.",
 };

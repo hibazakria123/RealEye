@@ -164,17 +164,17 @@ export default function Home() {
     }
   }, [imageFile, isAnalyzing]);
 
-  const scrollToUpload = useCallback(() => {
-    document
-      .getElementById("upload")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollTo = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
+  const scrollToUpload = useCallback(() => scrollTo("upload"), [scrollTo]);
+  const scrollToHow = useCallback(() => scrollTo("how"), [scrollTo]);
 
   return (
     <>
       <Navbar onCta={scrollToUpload} />
       <main>
-        <Hero onUpload={scrollToUpload} />
+        <Hero onUpload={scrollToUpload} onLearn={scrollToHow} />
         <ModelCards />
         <UploadZone
           preview={imagePreview}

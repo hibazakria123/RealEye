@@ -1,48 +1,76 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
+import { Eye, Menu } from "lucide-react";
+import { motion } from "framer-motion";
+import { useState } from "react";
 
 type Props = { onCta: () => void };
 
 export default function Navbar({ onCta }: Props) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <header className="glass-cream sticky top-0 z-50">
-      <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-10">
-        <a href="#top" className="flex items-center gap-2 text-ink">
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-ink text-cream">
-            <ShieldCheck size={18} strokeWidth={2.2} />
+    <motion.header
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
+      className="fixed left-1/2 top-4 z-50 -translate-x-1/2 px-4"
+    >
+      <nav className="nav-pill flex items-center gap-3 rounded-pill px-3 py-2 sm:gap-6 sm:px-4">
+        <a
+          href="#top"
+          className="flex items-center gap-2 px-2 text-text-dark"
+        >
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-text-dark text-cream">
+            <Eye size={14} strokeWidth={2.4} />
           </span>
-          <span className="font-serif text-2xl tracking-tight">DeepGuard</span>
+          <span className="font-sans text-base font-semibold tracking-tight">
+            RealEye
+          </span>
         </a>
 
-        <div className="hidden items-center gap-8 md:flex">
-          <a
-            href="#how"
-            className="text-sm font-medium text-ink/75 transition hover:text-ink"
-          >
+        <div className="hidden items-center gap-6 md:flex">
+          <a href="#how" className="nav-link text-sm font-medium text-text-dark/85">
             How It Works
           </a>
-          <a
-            href="#models"
-            className="text-sm font-medium text-ink/75 transition hover:text-ink"
-          >
+          <a href="#models" className="nav-link text-sm font-medium text-text-dark/85">
             Models
           </a>
-          <button
-            onClick={onCta}
-            className="rounded-pill bg-ink px-5 py-2.5 text-sm font-medium text-cream transition hover:bg-ink-soft"
-          >
-            Try Now
-          </button>
         </div>
 
         <button
           onClick={onCta}
-          className="rounded-pill bg-ink px-4 py-2 text-sm font-medium text-cream md:hidden"
+          className="hidden items-center rounded-pill bg-lavender px-5 py-2 text-sm font-semibold text-text-dark transition hover:scale-[1.02] active:scale-[0.98] md:inline-flex"
         >
           Try Now
         </button>
+
+        <button
+          onClick={onCta}
+          className="rounded-pill bg-lavender px-4 py-2 text-sm font-semibold text-text-dark md:hidden"
+        >
+          Try Now
+        </button>
+
+        <button
+          aria-label="Open menu"
+          onClick={() => setOpen((v) => !v)}
+          className="grid h-9 w-9 place-items-center rounded-full text-text-dark md:hidden"
+        >
+          <Menu size={18} />
+        </button>
       </nav>
-    </header>
+
+      {open ? (
+        <div className="nav-pill mx-auto mt-2 flex flex-col gap-3 rounded-3xl px-6 py-4 text-sm md:hidden">
+          <a href="#how" onClick={() => setOpen(false)} className="text-text-dark/85">
+            How It Works
+          </a>
+          <a href="#models" onClick={() => setOpen(false)} className="text-text-dark/85">
+            Models
+          </a>
+        </div>
+      ) : null}
+    </motion.header>
   );
 }

@@ -2,6 +2,7 @@
 
 import { ImageIcon, RotateCcw } from "lucide-react";
 import { ChangeEvent, DragEvent, useRef } from "react";
+import { motion } from "framer-motion";
 import Waveform from "./Waveform";
 
 type Props = {
@@ -41,22 +42,30 @@ export default function UploadZone({
   };
 
   return (
-    <section id="upload" className="bg-ink px-6 py-24 text-cream lg:py-32">
-      <div className="mx-auto max-w-4xl">
+    <section id="upload" className="bg-ink px-6 py-32 text-text-cream">
+      <div className="dot-grid-dark pointer-events-none absolute inset-x-0 h-full opacity-40" aria-hidden />
+      <div className="relative mx-auto max-w-4xl">
         <div className="text-center">
-          <span className="mb-4 inline-block text-xs font-medium uppercase tracking-[0.22em] text-mute">
+          <span className="mb-4 inline-block text-xs font-medium uppercase tracking-[0.24em] text-mute">
             Upload
           </span>
-          <h2 className="font-serif text-4xl leading-tight md:text-5xl lg:text-6xl">
-            Analyze your <span className="italic text-orange">image.</span>
-          </h2>
-          <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-mute md:text-lg">
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+            className="font-display"
+            style={{ fontSize: "clamp(40px, 6vw, 88px)", lineHeight: 1.0 }}
+          >
+            Analyze your <span style={{ color: "var(--color-coral)" }}>image.</span>
+          </motion.h2>
+          <p className="mx-auto mt-8 max-w-xl text-base leading-relaxed text-text-body-dark md:text-lg">
             Drop a photo and watch all three models weigh in. Real-time
             inference, transparent voting, no black boxes.
           </p>
         </div>
 
-        <label
+        <motion.label
           htmlFor="image-input"
           onDragOver={(e) => {
             e.preventDefault();
@@ -64,12 +73,25 @@ export default function UploadZone({
           }}
           onDragLeave={() => onSetDragOver(false)}
           onDrop={handleDrop}
-          className={`mt-12 block cursor-pointer rounded-card border-2 border-dashed bg-ink-soft/60 p-8 transition ${
+          animate={
             dragOver
-              ? "border-orange bg-orange/10"
-              : "border-cream/15 hover:border-cream/30"
-          }`}
+              ? { scale: 1.01, boxShadow: "0 0 0 2px var(--color-lavender)" }
+              : { scale: 1, boxShadow: "0 0 0 0 rgba(0,0,0,0)" }
+          }
+          transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+          className={`relative mt-14 block cursor-pointer overflow-hidden bg-ink-soft/70 p-2`}
+          style={{ borderRadius: "var(--radius-card)" }}
         >
+          <span
+            className="dashed-march pointer-events-none absolute inset-0"
+            style={{
+              borderRadius: "var(--radius-card)",
+              color: dragOver ? "var(--color-lavender)" : "rgba(239,231,210,0.35)",
+              transition: "color 200ms ease",
+            }}
+            aria-hidden
+          />
+
           <input
             id="image-input"
             ref={inputRef}
@@ -80,7 +102,13 @@ export default function UploadZone({
           />
 
           {preview ? (
-            <div className="relative mx-auto max-h-[480px] w-full max-w-2xl overflow-hidden rounded-2xl">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5, ease: [0.25, 0.1, 0.25, 1] }}
+              className="relative mx-auto max-h-[480px] w-full max-w-2xl overflow-hidden"
+              style={{ borderRadius: "calc(var(--radius-card) - 8px)" }}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={preview}
@@ -99,30 +127,32 @@ export default function UploadZone({
                 <RotateCcw size={14} strokeWidth={2.2} />
                 Change
               </button>
-            </div>
+            </motion.div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex flex-col items-center justify-center py-24 text-center">
               <span className="grid h-16 w-16 place-items-center rounded-full bg-cream/8 text-cream/70">
                 <ImageIcon size={28} strokeWidth={1.6} />
               </span>
-              <p className="mt-6 font-serif text-2xl">Drop your image here</p>
-              <p className="mt-2 text-sm text-mute">
+              <p className="mt-7 font-display text-3xl">Drop your image here</p>
+              <p className="mt-3 text-sm text-mute">
                 or click to browse — PNG, JPG, WEBP
               </p>
             </div>
           )}
-        </label>
+        </motion.label>
 
         {preview ? (
-          <div className="mt-8 flex justify-center">
+          <div className="mt-10 flex justify-center">
             <button
               onClick={onAnalyze}
               disabled={isAnalyzing}
-              className="glow-orange inline-flex items-center gap-3 rounded-pill bg-orange px-8 py-4 text-sm font-semibold text-cream transition hover:bg-orange-soft disabled:cursor-progress disabled:opacity-95"
+              className={`glow-lavender inline-flex items-center gap-3 rounded-pill bg-lavender px-8 py-4 text-sm font-semibold text-text-dark transition active:scale-[0.98] disabled:cursor-progress disabled:opacity-95 ${
+                isAnalyzing ? "" : "hover:scale-[1.02] animate-pulse-soft"
+              }`}
             >
               {isAnalyzing ? (
                 <>
-                  <Waveform count={5} className="text-cream" />
+                  <Waveform count={5} className="text-text-dark" />
                   Running 3-Model Analysis…
                 </>
               ) : (

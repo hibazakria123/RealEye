@@ -1,112 +1,123 @@
 "use client";
 
 import { Upload } from "lucide-react";
+import { motion } from "framer-motion";
 
-type Props = { onUpload: () => void };
+type Props = { onUpload: () => void; onLearn: () => void };
 
-export default function Hero({ onUpload }: Props) {
+const ease = [0.25, 0.1, 0.25, 1] as const;
+
+export default function Hero({ onUpload, onLearn }: Props) {
   return (
     <section
       id="top"
-      className="relative overflow-hidden bg-ink text-cream"
+      className="relative overflow-hidden bg-cream pt-32 pb-24 lg:pt-40 lg:pb-32"
     >
-      <div className="dot-grid absolute inset-0 opacity-60" />
+      <div className="dot-grid-light pointer-events-none absolute inset-0 opacity-50" />
 
       <svg
         aria-hidden
-        className="animate-float-slower pointer-events-none absolute -left-24 top-32 h-[420px] w-[420px] opacity-30"
+        className="animate-float-slow pointer-events-none absolute -right-32 top-24 h-[420px] w-[420px] opacity-40"
       >
         <circle
           cx="210"
           cy="210"
           r="180"
           fill="none"
-          stroke="#e8773a"
+          stroke="#0e0e0e"
           strokeWidth="1"
-          strokeDasharray="4 8"
-          opacity="0.45"
+          strokeDasharray="3 9"
         />
         <circle
           cx="210"
           cy="210"
           r="120"
           fill="none"
-          stroke="#faf5ed"
+          stroke="#e8674c"
           strokeWidth="1"
-          strokeDasharray="2 6"
-          opacity="0.25"
+          strokeDasharray="2 8"
+          opacity="0.6"
         />
       </svg>
 
-      <svg
-        aria-hidden
-        className="animate-float-slow pointer-events-none absolute -right-32 bottom-10 h-[380px] w-[380px] opacity-25"
-      >
-        <circle
-          cx="190"
-          cy="190"
-          r="160"
-          fill="none"
-          stroke="#faf5ed"
-          strokeWidth="1"
-          strokeDasharray="3 9"
-        />
-      </svg>
+      <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 text-center">
+        <motion.span
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3, ease }}
+          className="mb-10 inline-flex items-center gap-2 rounded-pill border border-text-dark/15 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-text-dark/70"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-coral" />
+          3-Model Ensemble
+        </motion.span>
 
-      <div className="pointer-events-none absolute inset-0">
-        {[
-          [12, 22],
-          [78, 18],
-          [22, 70],
-          [88, 62],
-          [55, 86],
-          [40, 30],
-        ].map(([x, y], i) => (
-          <span
-            key={i}
-            className="animate-float-slow absolute h-1.5 w-1.5 rounded-full bg-orange/70"
-            style={{
-              left: `${x}%`,
-              top: `${y}%`,
-              animationDelay: `${i * 0.6}s`,
-              opacity: 0.45,
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pt-24 pb-32 text-center lg:pt-32 lg:pb-40">
-        <span className="mb-8 inline-flex items-center gap-2 rounded-pill border border-orange/30 bg-orange/10 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-orange">
-          <span className="h-1.5 w-1.5 rounded-full bg-orange" />
-          3-Model Ensemble Detection
-        </span>
-
-        <h1 className="font-serif text-5xl leading-[1.05] sm:text-6xl md:text-7xl lg:text-[88px]">
-          Don&rsquo;t guess,
+        <motion.h1
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.5, ease }}
+          className="font-display"
+          style={{
+            fontSize: "clamp(48px, 8vw, 144px)",
+            letterSpacing: "-0.04em",
+            lineHeight: 0.95,
+          }}
+        >
+          See what&rsquo;s
           <br />
-          <span className="italic text-orange">detect.</span>
-        </h1>
+          <span style={{ color: "var(--color-coral)" }}>real.</span>
+        </motion.h1>
 
-        <p className="mt-8 max-w-2xl text-base leading-relaxed text-mute md:text-lg">
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.7, delay: 0.8, ease }}
+          className="mt-10 max-w-xl text-base leading-relaxed text-text-dark/75 md:text-lg"
+        >
           Three independent AI models analyze every pixel. Majority voting
           delivers the truth with confidence you can measure.
-        </p>
+        </motion.p>
 
-        <button
-          onClick={onUpload}
-          className="glow-orange mt-10 inline-flex items-center gap-2.5 rounded-pill bg-orange px-7 py-4 text-sm font-semibold text-cream transition hover:bg-orange-soft"
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 1.0, ease }}
+          className="mt-12 flex flex-wrap items-center justify-center gap-3"
         >
-          <Upload size={18} strokeWidth={2.4} />
-          Upload Image
-        </button>
+          <button
+            onClick={onUpload}
+            className="glow-lavender inline-flex items-center gap-2.5 rounded-pill bg-lavender px-7 py-3.5 text-sm font-semibold text-text-dark transition hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Upload size={17} strokeWidth={2.4} />
+            Upload Image
+          </button>
+          <button
+            onClick={onLearn}
+            className="inline-flex items-center rounded-pill border-[1.5px] border-text-dark/80 px-7 py-3.5 text-sm font-semibold text-text-dark transition hover:scale-[1.02] hover:bg-text-dark hover:text-cream active:scale-[0.98]"
+          >
+            Learn More
+          </button>
+        </motion.div>
 
-        <div className="mt-14 flex items-center gap-6 text-xs uppercase tracking-[0.22em] text-mute">
-          <span>DeepCNN</span>
-          <span className="h-px w-8 bg-mute/40" />
-          <span>FocusCNN</span>
-          <span className="h-px w-8 bg-mute/40" />
-          <span>HybridNet</span>
-        </div>
+        <motion.div
+          initial="hidden"
+          animate="show"
+          variants={{
+            hidden: { opacity: 1 },
+            show: { opacity: 1, transition: { delayChildren: 1.2, staggerChildren: 0.15 } },
+          }}
+          className="mt-16 flex items-center gap-6 text-xs uppercase tracking-[0.24em] text-text-dark/55"
+        >
+          {["DeepCNN", "FocusCNN", "HybridNet"].map((name, i) => (
+            <motion.span
+              key={name}
+              variants={{ hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } }}
+              className="flex items-center gap-6"
+            >
+              {i > 0 ? <span className="h-px w-8 bg-text-dark/25" /> : null}
+              {name}
+            </motion.span>
+          ))}
+        </motion.div>
       </div>
     </section>
   );

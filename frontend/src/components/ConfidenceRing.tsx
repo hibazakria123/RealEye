@@ -70,12 +70,12 @@ export default function ConfidenceRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-serif text-3xl text-cream">
+        <span className="font-display text-4xl text-text-cream">
           {Math.round(progress)}
-          <span className="text-base align-top">%</span>
+          <span className="font-sans text-base align-top not-italic">%</span>
         </span>
         {label ? (
-          <span className="text-[11px] uppercase tracking-[0.18em] text-mute mt-0.5">
+          <span className="mt-1 text-[11px] uppercase tracking-[0.18em] text-mute">
             {label}
           </span>
         ) : null}
