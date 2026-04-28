@@ -1,5 +1,6 @@
 import io
 import logging
+import os
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -74,18 +75,33 @@ def load_models() -> None:
     )
 
 
-CLASS_NAMES = ("REAL", "FAKE")  # class 0 = REAL, class 1 = FAKE
+# Class order is configurable via env var so you can flip it without
+# editing code. Default follows the most common convention (class 0 = REAL,
+# class 1 = FAKE). If your training labelled the other way around, set:
+#   DEEPGUARD_CLASS_ORDER=FAKE,REAL
+def _resolve_class_names() -> tuple:
+    raw = os.environ.get("DEEPGUARD_CLASS_ORDER", "REAL,FAKE")
+    parts = tuple(p.strip().upper() for p in raw.split(",") if p.strip())
+    if len(parts) != 2 or set(parts) != {"REAL", "FAKE"}:
+        logger.warning(
+            "Invalid DEEPGUARD_CLASS_ORDER=%r, falling back to REAL,FAKE", raw
+        )
+        return ("REAL", "FAKE")
+    return parts
 
 
-def _predict_single(model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
+CLASS_NAMES = _resolve_class_names()
+logger.info("Class order: index 0 = %s, index 1 = %s", CLASS_NAMES[0], CLASS_NAMES[1])
+
+
+def _predict_single(model: torch.nn.Module, tensor: torch.Tensor, name: str = "") -> Dict:
     """
     Run one forward pass and convert the output to a label + confidence.
 
     Handles two output shapes:
-      - 2-class logits (DeepCNN, FocusCNN): softmax → argmax,
+      - 2-class logits (DeepCNN, FocusCNN, HybridNet): softmax → argmax,
         confidence = softmax probability of the predicted class.
-      - 1-output sigmoid (HybridNet fallback): threshold at 0.5,
-        confidence = prob if FAKE else 1 - prob.
+      - 1-output sigmoid (legacy fallback): threshold at 0.5.
     """
     with torch.no_grad():
         output = model(tensor)
@@ -94,17 +110,26 @@ def _predict_single(model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
     n = flat.shape[-1]
 
     if n == 2:
-        probs = torch.softmax(flat[0], dim=0)
+        logits = flat[0]
+        probs = torch.softmax(logits, dim=0)
         pred_idx = int(torch.argmax(probs).item())
         confidence = float(probs[pred_idx].item())
         label = CLASS_NAMES[pred_idx]
-        raw = [round(float(probs[0].item()), 4), round(float(probs[1].item()), 4)]
+        raw = {
+            "logits": [round(float(logits[0].item()), 4), round(float(logits[1].item()), 4)],
+            "probs": [round(float(probs[0].item()), 4), round(float(probs[1].item()), 4)],
+        }
+        logger.info(
+            "[%s] logits=%s probs=%s argmax=%d → %s (%.4f)",
+            name or "?", raw["logits"], raw["probs"], pred_idx, label, confidence,
+        )
     else:
         prob = float(flat[0, 0].item())
         is_fake = prob > FAKE_THRESHOLD
         label = "FAKE" if is_fake else "REAL"
         confidence = prob if is_fake else 1.0 - prob
         raw = round(prob, 4)
+        logger.info("[%s] sigmoid=%.4f → %s (%.4f)", name or "?", prob, label, confidence)
 
     return {
         "prediction": label,
@@ -114,7 +139,7 @@ def _predict_single(model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
 
 
 def _run_model(name: str, model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
-    result = _predict_single(model, tensor)
+    result = _predict_single(model, tensor, name=name)
     result["model_name"] = name
     return result
 
