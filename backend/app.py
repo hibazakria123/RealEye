@@ -74,22 +74,47 @@ def load_models() -> None:
     )
 
 
-def _interpret(prob: float) -> Dict:
-    is_fake = prob > FAKE_THRESHOLD
-    label = "FAKE" if is_fake else "REAL"
-    confidence = float(prob if is_fake else 1.0 - prob)
+CLASS_NAMES = ("REAL", "FAKE")  # class 0 = REAL, class 1 = FAKE
+
+
+def _predict_single(model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
+    """
+    Run one forward pass and convert the output to a label + confidence.
+
+    Handles two output shapes:
+      - 2-class logits (DeepCNN, FocusCNN): softmax → argmax,
+        confidence = softmax probability of the predicted class.
+      - 1-output sigmoid (HybridNet fallback): threshold at 0.5,
+        confidence = prob if FAKE else 1 - prob.
+    """
+    with torch.no_grad():
+        output = model(tensor)
+
+    flat = output.view(output.shape[0], -1) if output.dim() > 1 else output.view(1, -1)
+    n = flat.shape[-1]
+
+    if n == 2:
+        probs = torch.softmax(flat[0], dim=0)
+        pred_idx = int(torch.argmax(probs).item())
+        confidence = float(probs[pred_idx].item())
+        label = CLASS_NAMES[pred_idx]
+        raw = [round(float(probs[0].item()), 4), round(float(probs[1].item()), 4)]
+    else:
+        prob = float(flat[0, 0].item())
+        is_fake = prob > FAKE_THRESHOLD
+        label = "FAKE" if is_fake else "REAL"
+        confidence = prob if is_fake else 1.0 - prob
+        raw = round(prob, 4)
+
     return {
         "prediction": label,
         "confidence": round(confidence, 4),
-        "raw_score": round(float(prob), 4),
+        "raw_score": raw,
     }
 
 
 def _run_model(name: str, model: torch.nn.Module, tensor: torch.Tensor) -> Dict:
-    with torch.no_grad():
-        output = model(tensor)
-    prob = output.view(-1)[0].item()
-    result = _interpret(prob)
+    result = _predict_single(model, tensor)
     result["model_name"] = name
     return result
 
